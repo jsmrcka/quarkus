@@ -1,15 +1,14 @@
 package io.quarkus.it.container.image;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.Properties;
 
 import org.apache.commons.lang3.StringUtils;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import io.quarkus.container.image.deployment.ContainerImageConfig;
 import io.quarkus.container.image.deployment.ContainerImageProcessor;
@@ -34,16 +33,34 @@ public class ContainerImageNameTest {
     private static final String GROUP_PROPERTY = "quarkus.container-image.group";
     private static final String USER_NAME_PROPERTY = "user.name";
 
+    private static final Properties initialSystemProperties = new Properties();
+
     Properties testProperties = new Properties();
 
     ContainerImageInfoBuildItem actualContainerImageInfo;
 
+    @BeforeAll
+    public static void backupSystemProperties() {
+        System.setProperty(APP_PROPERTY, APP_NAME);
+        System.setProperty(VERSION_PROPERTY, APP_VERSION);
+        initialSystemProperties.putAll(System.getProperties());
+    }
+
+    @AfterAll
+    public static void restoreSystemProperties() {
+        System.getProperties().remove(APP_PROPERTY);
+        System.getProperties().remove(VERSION_PROPERTY);
+    }
+
     @BeforeEach
     public void setup() {
-        System.getProperties().clear();
         testProperties.clear();
-        givenProperty(APP_PROPERTY, APP_NAME);
-        givenProperty(VERSION_PROPERTY, APP_VERSION);
+    }
+
+    @AfterEach
+    public void tearDown() {
+        System.getProperties().clear();
+        System.getProperties().putAll(initialSystemProperties);
     }
 
     @Test
@@ -67,12 +84,11 @@ public class ContainerImageNameTest {
         thenImageIs("user-surname/" + APP_NAME + ":" + APP_VERSION);
     }
 
-    //    @Test
-    //    public void shouldNotFailWhenSpacesInGroupProperty() {
-    //        givenProperty(GROUP_PROPERTY, "group with space");
-    //        whenPublishImageInfo();
-    //        thenImageIs("group-with-space/" + APP_NAME + ":" + APP_VERSION);
-    //    }
+    @Test
+    public void shouldFailWhenSpacesInGroupProperty() {
+        givenProperty(GROUP_PROPERTY, "group with space");
+        thenImagePublicationFails();
+    }
 
     private void givenNoUserName() {
         givenProperty(USER_NAME_PROPERTY, StringUtils.EMPTY);
@@ -84,11 +100,11 @@ public class ContainerImageNameTest {
 
     private void givenProperty(String key, String value) {
         System.setProperty(key, value);
-        // testProperties.put(key, value);
     }
 
-    private void whenPublishImageInfo() {
-        BuildTimeConfigurationReader reader = new BuildTimeConfigurationReader(Arrays.asList(ContainerImageConfig.class));
+    private void whenPublishImageInfo() throws RuntimeException {
+        BuildTimeConfigurationReader reader = new BuildTimeConfigurationReader(
+                Collections.singletonList(ContainerImageConfig.class));
         SmallRyeConfigBuilder builder = ConfigUtils.configBuilder(false);
 
         DefaultValuesConfigurationSource ds = new DefaultValuesConfigurationSource(
@@ -110,5 +126,9 @@ public class ContainerImageNameTest {
 
     private void thenImageIs(String expectedImage) {
         assertEquals(expectedImage, actualContainerImageInfo.getImage());
+    }
+
+    private void thenImagePublicationFails() {
+        assertThrows(IllegalArgumentException.class, this::whenPublishImageInfo);
     }
 }
